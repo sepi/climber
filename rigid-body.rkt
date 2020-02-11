@@ -1,14 +1,15 @@
 #lang racket
 
 (require racket/dict
-         rnrs/base-6
-         posn)
+         posn
+         "posn+.rkt")
 
 (provide rb
          rb-rotation
          rb-position
          rb*
          rb-hook*
+         rb-hook
          rb/set-hook
          rb/damped-spring-force
          rb/set-hook-force
@@ -39,9 +40,6 @@
 (define (rb/find-hook an-rb key)
   (dict-ref (rb-hooks an-rb) key))
 
-(define (rb/rot anchor rotation point)
-  (posn-rotate-ccw anchor (mod rotation 360) point))
-
 ; find hook position in global coordinates
 (define (rb/find-hook-position an-rb key)
   (rb/transform-hook-position an-rb (rb/find-hook an-rb key)))
@@ -51,13 +49,13 @@
          [rot (rb-rotation an-rb)]
          [hook-position (rb-hook-position a-hook)])
     (posn-add cm
-              (rb/rot origin rot hook-position))))
+              (posn-rot origin rot hook-position))))
 
 (define (rb/transform-hook-velocity an-rb a-hook)
   (let* ([cm (rb-position an-rb)]
          [alpha (rb-rotation an-rb)]
          [rot-vel (rb-rotation-velocity an-rb)]
-         [vec-rot (rb/rot origin (+ alpha 90) (posn 1 0))]
+         [vec-rot (posn-rot origin (+ alpha 90) (posn 1 0))]
          [rb-vel (rb-position-velocity an-rb)])
     (posn-add (posn-scale rot-vel vec-rot)
               rb-vel)))
@@ -68,10 +66,6 @@
 (define (rb/find-hook-velocity an-rb key)
   (rb/transform-hook-velocity an-rb (rb/find-hook an-rb key)))
 
-(define (posn-dotp a b)
-  (+ (* (posn-x a) (posn-x b))
-     (* (posn-y a) (posn-y b))))
-
 ; hook->tip O----c
 (define (rb/damped-spring-force a b a-velocity base-len k beta)
   (let* ([ab (posn-subtract b a)]
@@ -80,10 +74,12 @@
          [ab-norm (posn-normalize ab)]
          [a-velocity-len (posn-len a-velocity)]
          [a-velocity-proj (posn-dotp ab-norm a-velocity)]
-         
-         [force-factor (+ (- (* k len-diff))
-                          (- (* beta a-velocity-proj)))])
-    (posn-scale force-factor ab-norm)))
+         [k-part (- (* k len-diff))]
+         ;[k-part-eff (* (sgn k-part) (sqr k-part) 0.00001)] ; Quadratic spring
+         [beta-part (- (* beta a-velocity-proj))]
+         [force-factor (+ k-part beta-part)])
+    (posn-scale force-factor
+                ab-norm)))
 
 (define (rb/set-hook-force an-rb key frce)
   (rb/set-hook an-rb key
@@ -93,7 +89,7 @@
 (define (rb/torque lever frce)
   (* (posn-len lever)
      (posn-len frce)
-     (sin (to-rad (posn-angle-diff lever frce)))))
+     (sin (degrees->radians (posn-angle-diff lever frce)))))
 
 (define (rb/resultant-force an-rb)
   (sequence-fold (lambda (f-sum b-hook)
@@ -106,7 +102,6 @@
                    (let* ([cm (rb-position an-rb)]
                           [hook-posn (rb/transform-hook-position an-rb hook)]
                           [lever (posn-subtract hook-posn cm)])
-                     ;(display lever)
                      (+ torque
                         (rb/torque lever (rb-hook-f hook)))))
                  0
@@ -130,35 +125,9 @@
          [rot-dp (* rot-v-new dt)]
          [rot-p (rb-rotation an-rb)]
          [rot-p-new (+ rot-p rot-dp)])
-    ;(displayln rot-p-new)
     (struct-copy rb an-rb
                  [position-velocity v-new]
                  [position p-new]
                  [rotation-velocity rot-v-new]
                  [rotation rot-p-new]
                  )))
-
-(define (posn-len a-posn)
-  (sqrt (+ (* (posn-x a-posn) (posn-x a-posn))
-           (* (posn-y a-posn) (posn-y a-posn)))))
-
-(define (posn-normalize a-posn)
-  (posn-scale (/ 1 (posn-len a-posn)) a-posn))
-
-(define (posn-abs a-posn)
-  (posn (abs (posn-x a-posn)) (abs (posn-y a-posn))))
-
-(define (to-deg rad)
-  (* 180 (/ 1 pi) rad))
-
-(define (to-rad deg)
-  (* pi (/ 1 180) deg))
-
-(define (posn-angle a-posn)
-  (if (equal? a-posn (posn 0 0))
-      0
-      (to-deg (atan (posn-y a-posn) (posn-x a-posn)))))
-
-(define (posn-angle-diff a-posn b-posn)
-  (- (posn-angle b-posn)
-     (posn-angle a-posn)))
