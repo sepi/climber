@@ -12,12 +12,14 @@
 (define HEIGHT 600)
 (define SCENE (empty-scene WIDTH HEIGHT))
 
-(define INITIAL-POS (posn (/ WIDTH 2)
+(define INITIAL-POSITION (posn (/ WIDTH 2)
                           (/ HEIGHT 2)))
-(define INITIAL-ROT 0)
-(define INITIAL-MASS 3)
-(define INITIAL-ROT-MASS 900)
-(define EMPTY-RB (rb* INITIAL-POS INITIAL-ROT INITIAL-MASS INITIAL-ROT-MASS))
+(define INITIAL-ROTATION 0)
+(define INITIAL-POSITION-MASS 3)
+(define INITIAL-ROTATION-MASS 900)
+(define EMPTY-RB
+  (rb* INITIAL-POSITION INITIAL-ROTATION
+       INITIAL-POSITION-MASS INITIAL-ROTATION-MASS))
 (define DT (/ 1 60.0))
 
 (define K 1400.0)
@@ -31,7 +33,7 @@
 (define-struct limb (rest-length tip)
   #:transparent)
 
-(define INITIAL-TIP-MAP
+(define TIP-OFFSET-MAP
   `((sh-l . ,(posn -40 -30))
     (sh-r . ,(posn 40 -30))
     (hi-l . ,(posn -40 30))
@@ -39,8 +41,8 @@
 
 (define TIPS
   (map (lambda (key)
-         (cons key (limb 20 (posn-add (dict-ref INITIAL-TIP-MAP key)
-                                      INITIAL-POS))))
+         (cons key (limb 20 (posn-add (dict-ref TIP-OFFSET-MAP key)
+                                      INITIAL-POSITION))))
        LIMB-KEYS))
 
 (define (initialize-rb an-rb)
@@ -112,7 +114,7 @@
 (define (climber-state-set-tip-posn state key a-posn)
   (let* ([limbs (climber-state-limbs state)]
          [limb+ (find-limb state key)]
-         [limb-tip-orig (posn-add INITIAL-POS (dict-ref INITIAL-TIP-MAP key))]
+         [limb-tip-orig (posn-add INITIAL-POSITION (dict-ref TIP-OFFSET-MAP key))]
          [limb-new (struct-copy limb limb+
                                 [tip (posn-add a-posn limb-tip-orig)])]
          )
