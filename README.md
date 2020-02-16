@@ -1,5 +1,6 @@
-# climber
 ![screenshot](screenshot.png)
+
+# climber
 A simple climbing simulator in racket
 
 In its very early state.
