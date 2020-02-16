@@ -2,6 +2,7 @@
 
 (require racket/dict
          posn
+         lens
          "posn+.rkt")
 
 (provide rb
@@ -10,6 +11,9 @@
          rb*
          rb-hook*
          rb-hook
+         rb-hooks
+         rb-hooks-lens
+         rb-hook-f-lens
          rb/set-hook
          rb/damped-spring-force
          rb/set-hook-force
@@ -17,17 +21,17 @@
          rb/find-hook-position
          rb/integrate)
 
-(define-struct rb (position position-velocity
-                   rotation rotation-velocity
-                   position-mass
-                   rotation-mass
-                   hooks)
+(struct/lens rb (position position-velocity
+                          rotation rotation-velocity
+                          position-mass
+                          rotation-mass
+                          hooks)
   #:transparent)
 
 (define (rb* position rotation position-mass rotation-mass)
   (rb position (posn 0 0) rotation 0 position-mass rotation-mass '()))
 
-(define-struct rb-hook (position f)
+(struct/lens rb-hook (position f)
   #:transparent)
 
 (define (rb-hook* position)

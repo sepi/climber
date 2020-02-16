@@ -5,14 +5,15 @@
          posn
          rackunit
          threading
+         lens
          "dualshock.rkt"
          "rigid-body.rkt"
          "posn+.rkt")
 
-(define-struct climber-state (torso limbs time)
+(struct/lens climber-state (torso limbs time)
   #:transparent)
 
-(define-struct limb (rest-length tip)
+(struct/lens limb (rest-length tip)
   #:transparent)
 
 (define WIDTH 600)
@@ -112,17 +113,10 @@
 (define (cs/find-limb cs key)
   (dict-ref (climber-state-limbs cs) key))
 
-(define (cs/limb-force cs key)
-  (let* ([torso (climber-state-torso cs)]
-         [hook-posn (rb/find-hook-position torso key)]
-         [hook-vel (rb/find-hook-velocity torso key)]
-         [limbs (climber-state-limbs cs)]
-         [limb-posn (limb-tip (dict-ref limbs key))]
-         [limb-rest-len (limb-rest-length (dict-ref limbs key))]
-         [force (rb/damped-spring-force hook-posn limb-posn
-                                        hook-vel limb-rest-len
-                                        K BETA)])
-    force))
+(define (cs/hook-limb-force hook-posn hook-vel limb)
+  (rb/damped-spring-force hook-posn (limb-tip limb)
+                          hook-vel (limb-rest-length limb)
+                          K BETA))
 
 (define (cs/draw cs)
   (let* ([an-rb (climber-state-torso cs)]
@@ -132,8 +126,7 @@
                               LIMB-KEYS)]
          [hook-vels (map (λ (key) (rb/find-hook-velocity an-rb key))
                          LIMB-KEYS)]
-         [head-hook (rb/find-hook-position (climber-state-torso cs)
-                                           'head)])
+         [head-hook (rb/find-hook-position (climber-state-torso cs) 'head)])
     (~> SCENE
         (foldl (λ (hook-posn image)
                  (place image (circle 3 'outline "black") hook-posn))
@@ -155,58 +148,51 @@
         (place _ (circle 10 'outline "black") head-hook))))
 
 (define (cs/set-limb-tip-posn cs key a-posn)
-  (let* ([limbs (climber-state-limbs cs)]
-         [limb+ (cs/find-limb cs key)]
-         [limb-tip-orig (posn-add INITIAL-POSITION (dict-ref TIP-OFFSET-MAP key))]
-         [limb-new (struct-copy limb limb+
-                                [tip (posn-add a-posn limb-tip-orig)])])
-    (struct-copy climber-state cs
-                 [limbs (dict-set limbs key limb-new)])))
+  (let ([limb-tip-orig (posn-add INITIAL-POSITION (dict-ref TIP-OFFSET-MAP key))])
+    (lens-transform (lens-compose limb-tip-lens
+                                  (dict-ref-lens key)
+                                  climber-state-limbs-lens)
+                    cs
+                    (λ (tip-posn) (posn-add a-posn limb-tip-orig)))))
 
-(define (cs/update-torso cs dt)
-  (let* ([cs1 (foldl (lambda (key state)
-                       (struct-copy climber-state state
-                                    [torso
-                                     (rb/set-hook-force
-                                      (climber-state-torso state) key
-                                      (cs/limb-force state key))]))
-                     cs
-                     LIMB-KEYS)])
-    (rb/integrate
-     (climber-state-torso cs1) dt)))
+(define (cs/set-hook-force cs key f)
+  (lens-set (lens-compose rb-hook-f-lens
+                          (dict-ref-lens key)
+                          rb-hooks-lens
+                          climber-state-torso-lens)
+            cs
+            f))
 
-(define (cs/tick state)
+(define (cs/apply-limb-force torso limbs key)
+  (lens-set (lens-compose rb-hook-f-lens
+                          (dict-ref-lens key)
+                          rb-hooks-lens)
+            torso
+            (cs/hook-limb-force (rb/find-hook-position torso key)
+                                (rb/find-hook-velocity torso key)
+                                (dict-ref limbs key))))
+
+;; Apply limb forces to hooks
+(define (cs/apply-limb-forces torso limbs)
+  (foldl (λ (key t) (cs/apply-limb-force t limbs key))
+         torso
+         LIMB-KEYS))
+
+(define (cs/tick cs)
   (let-values ([(stick-l stick-r) (pad-stick-posns)])
-    (let* ([dt DT]
-           [cur-time (climber-state-time state)]
-           [torso-rb (climber-state-torso state)])
-      (cs/set-limb-tip-posn
-       (cs/set-limb-tip-posn
-        (struct-copy climber-state
-                     state
-                     [time (+ cur-time dt)]
-                     [torso (cs/update-torso state dt)])
-        'sh-l stick-l)
-       'sh-r stick-r))))
-
-(define (cs/key state key)
-  (cond [(key=? key "left")
-         (struct-copy climber-state state
-                      [torso (rb/set-hook-force
-                              (climber-state-torso state) 'sh-l (posn -100 0))])]
-        [(key=? key "right")
-         (struct-copy climber-state state
-                      [torso (rb/set-hook-force
-                              (climber-state-torso state) 'sh-r (posn 100 0))])]
-        [else
-         (struct-copy climber-state state
-                      [torso (rb/set-hook-force
-                              (rb/set-hook-force
-                               (climber-state-torso state) 'sh-l origin)
-                              'sh-r origin)])
-         ]))
+    (~> cs
+        (lens-transform climber-state-torso-lens ; update torso force
+                        _
+                        (λ (t) (cs/apply-limb-forces t (climber-state-limbs cs))))
+        (lens-transform climber-state-torso-lens ; integrate torso posn/rot
+                        _
+                        (λ (t) (rb/integrate t DT)))
+        (lens-transform climber-state-time-lens ; update cs time
+                        _
+                        (λ (t) (+ t DT)))
+        (cs/set-limb-tip-posn _ 'sh-l stick-l)
+        (cs/set-limb-tip-posn _ 'sh-r stick-r))))
 
 (big-bang (cs/init EMPTY-RB)
           [to-draw cs/draw WIDTH HEIGHT]
-          [on-tick cs/tick DT]
-          [on-key  cs/key])
+          [on-tick cs/tick DT])
