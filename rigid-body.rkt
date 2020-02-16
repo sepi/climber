@@ -14,9 +14,8 @@
          rb-hooks
          rb-hooks-lens
          rb-hook-f-lens
-         rb/set-hook
+         rb/hook-lens
          rb/damped-spring-force
-         rb/set-hook-force
          rb/find-hook-velocity
          rb/find-hook-position
          rb/integrate)
@@ -37,16 +36,19 @@
 (define (rb-hook* position)
   (rb-hook position origin))
 
-(define (rb/set-hook an-rb key hook)
-  (struct-copy rb an-rb
-               [hooks (dict-set (rb-hooks an-rb) key hook)]))
-
-(define (rb/find-hook an-rb key)
-  (dict-ref (rb-hooks an-rb) key))
+(define (rb/hook-lens key)
+  (lens-compose (dict-ref-lens key)
+                rb-hooks-lens))
 
 ; find hook position in global coordinates
 (define (rb/find-hook-position an-rb key)
-  (rb/transform-hook-position an-rb (rb/find-hook an-rb key)))
+  (rb/transform-hook-position an-rb
+                              (lens-view (rb/hook-lens key) an-rb)))
+
+; find hook velocity in global coordinates
+(define (rb/find-hook-velocity an-rb key)
+  (rb/transform-hook-velocity an-rb
+                              (lens-view (rb/hook-lens key) an-rb)))
 
 (define (rb/transform-hook-position an-rb a-hook)
   (let* ([cm (rb-position an-rb)]
@@ -64,12 +66,6 @@
     (posn-add (posn-scale rot-vel vec-rot)
               rb-vel)))
 
-(define (rb/find-hook-force an-rb key)
-  (rb-hook-f (rb/find-hook an-rb key)))
-
-(define (rb/find-hook-velocity an-rb key)
-  (rb/transform-hook-velocity an-rb (rb/find-hook an-rb key)))
-
 ; hook->tip O----c
 (define (rb/damped-spring-force a b a-velocity base-len k beta)
   (let* ([ab (posn-subtract b a)]
@@ -84,11 +80,6 @@
          [force-factor (+ k-part beta-part)])
     (posn-scale force-factor
                 ab-norm)))
-
-(define (rb/set-hook-force an-rb key frce)
-  (rb/set-hook an-rb key
-               (struct-copy rb-hook (rb/find-hook an-rb key)
-                            [f frce])))
 
 (define (rb/torque lever frce)
   (* (posn-len lever)

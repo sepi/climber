@@ -62,12 +62,12 @@
     (let ([torso-pos (rb-position an-rb)])
       (rb-hook* (posn x y))))
   (~> an-rb
-      (rb/set-hook 'sh-l (make-hook-from-offset -10 -20))
-      (rb/set-hook 'sh-r (make-hook-from-offset 10 -20))
-      (rb/set-hook 'hi-l (make-hook-from-offset -10 20))
-      (rb/set-hook 'hi-r (make-hook-from-offset 10 20))
-      (rb/set-hook 'cg (make-hook-from-offset 0 0))
-      (rb/set-hook 'head (make-hook-from-offset 0 -35))))
+      (lens-set (rb/hook-lens 'sh-l) _ (make-hook-from-offset -10 -20))
+      (lens-set (rb/hook-lens 'sh-r) _ (make-hook-from-offset 10 -20))
+      (lens-set (rb/hook-lens 'hi-l) _ (make-hook-from-offset -10 20))
+      (lens-set (rb/hook-lens 'hi-r) _ (make-hook-from-offset 10 20))
+      (lens-set (rb/hook-lens 'cg) _ (make-hook-from-offset 0 0))
+      (lens-set (rb/hook-lens 'head) _ (make-hook-from-offset 0 -35))))
 
 (define (line canvas from to color)
   (scene+line canvas
