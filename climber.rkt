@@ -10,27 +10,40 @@
          "rigid-body.rkt"
          "posn+.rkt")
 
-(struct/lens climber-state (torso limbs time)
-  #:transparent)
+(struct/lens climber-state (sim limbs time)
+             #:transparent)
+
+(struct/lens sim (rigid-bodies forces)
+             #:transparent)
 
 (struct/lens limb (rest-length tip)
-  #:transparent)
+             #:transparent)
+
+; Represents a force generating connection between two rigid-body hooks.
+; The calculated force will be applied to both hooks.
+; hooks are referenced using paths i.e. pairs (rigid-body-id . hook-id)
+; function is a function: sim hook-path hook-path force-state -> force
+(struct/lens force (a-hook-path b-hook-path function state)
+             #:transparent)
+
+(define climber-state-torso-lens
+  (lens-compose (dict-ref-lens 'torso)
+                sim-rigid-bodies-lens
+                climber-state-sim-lens))
 
 (define WIDTH 600)
 (define HEIGHT 600)
 (define SCENE (empty-scene WIDTH HEIGHT))
 
-(define INITIAL-POSITION (posn (/ WIDTH 2)
-                          (/ HEIGHT 2)))
-(define INITIAL-ROTATION 0)
-(define INITIAL-POSITION-MASS 3)
-(define INITIAL-ROTATION-MASS 900)
-(define INITIAL-LIMB-LENGTH 20)
-(define EMPTY-RB
-  (rb* INITIAL-POSITION INITIAL-ROTATION
-       INITIAL-POSITION-MASS INITIAL-ROTATION-MASS))
-(define DT (/ 1 60.0))
+(define TORSO-POSITION (posn (/ WIDTH 2)
+                             (/ HEIGHT 2)))
 
+(define TORSO-POSITION-MASS 3)
+(define TORSO-ROTATION-MASS 900)
+
+(define INITIAL-LIMB-LENGTH 20)
+
+(define DT (/ 1 60.0))
 (define K 1400.0)
 (define BETA 80.0)
 (define GRAVITY-FORCE 50000)
@@ -54,20 +67,8 @@
   (map (lambda (key)
          (cons key (limb INITIAL-LIMB-LENGTH
                          (posn-add (dict-ref TIP-OFFSET-MAP key)
-                                   INITIAL-POSITION))))
+                                   TORSO-POSITION))))
        LIMB-KEYS))
-
-(define (initialize-rb an-rb)
-  (define (make-hook-from-offset x y)
-    (let ([torso-pos (rb-position an-rb)])
-      (rb-hook* (posn x y))))
-  (~> an-rb
-      (lens-set (rb/hook-lens 'sh-l) _ (make-hook-from-offset -10 -20))
-      (lens-set (rb/hook-lens 'sh-r) _ (make-hook-from-offset 10 -20))
-      (lens-set (rb/hook-lens 'hi-l) _ (make-hook-from-offset -10 20))
-      (lens-set (rb/hook-lens 'hi-r) _ (make-hook-from-offset 10 20))
-      (lens-set (rb/hook-lens 'cg) _ (make-hook-from-offset 0 0))
-      (lens-set (rb/hook-lens 'head) _ (make-hook-from-offset 0 -35))))
 
 (define (line canvas from to color)
   (scene+line canvas
@@ -104,12 +105,6 @@
     (line (line canvas hook knee "black")
           knee tip "black")))
 
-;; climber-state
-(define (cs/init empty-rb)
-  (climber-state (initialize-rb empty-rb)
-                 LIMB-MAP
-                 0))
-
 (define (cs/find-limb cs key)
   (dict-ref (climber-state-limbs cs) key))
 
@@ -119,14 +114,15 @@
                           K BETA))
 
 (define (cs/draw cs)
-  (let* ([an-rb (climber-state-torso cs)]
+  (let* ([an-rb (lens-view climber-state-torso-lens cs)]
          [hook-posns (map (λ (key) (rb/find-hook-position an-rb key))
                           LIMB-KEYS)]
          [limb-tip-posns (map (λ (key) (limb-tip (cs/find-limb cs key)))
                               LIMB-KEYS)]
          [hook-vels (map (λ (key) (rb/find-hook-velocity an-rb key))
                          LIMB-KEYS)]
-         [head-hook (rb/find-hook-position (climber-state-torso cs) 'head)])
+         [head-hook (rb/find-hook-position (lens-view climber-state-torso-lens cs)
+                                           'head)])
     (~> SCENE
         (foldl (λ (hook-posn image)
                  (place image (circle 3 'outline "black") hook-posn))
@@ -148,7 +144,7 @@
         (place _ (circle 10 'outline "black") head-hook))))
 
 (define (cs/set-limb-tip-posn cs key limb-tip-offset)
-  (let ([limb-tip-orig (posn-add INITIAL-POSITION (dict-ref TIP-OFFSET-MAP key))])
+  (let ([limb-tip-orig (posn-add TORSO-POSITION (dict-ref TIP-OFFSET-MAP key))])
     (lens-set (lens-compose limb-tip-lens
                             (dict-ref-lens key)
                             climber-state-limbs-lens)
@@ -194,6 +190,78 @@
         (cs/set-limb-tip-posn _ 'sh-l stick-l)
         (cs/set-limb-tip-posn _ 'sh-r stick-r))))
 
-(big-bang (cs/init EMPTY-RB)
+(define (initialize-torso)
+  (let ([torso (rb* 'torso
+                    #false
+                    TORSO-POSITION 0
+                    TORSO-POSITION-MASS TORSO-ROTATION-MASS)])
+    (define (make-hook-from-offset x y)
+      (rb-hook* (posn x y)))
+    (~> torso
+        (lens-set (rb/hook-lens 'sh-l) _ (make-hook-from-offset -10 -20))
+        (lens-set (rb/hook-lens 'sh-r) _ (make-hook-from-offset 10 -20))
+        (lens-set (rb/hook-lens 'hi-l) _ (make-hook-from-offset -10 20))
+        (lens-set (rb/hook-lens 'hi-r) _ (make-hook-from-offset 10 20))
+        (lens-set (rb/hook-lens 'cg) _ (make-hook-from-offset 0 0))
+        (lens-set (rb/hook-lens 'head) _ (make-hook-from-offset 0 -35)))))
+
+;; Initialize hand or foot rigid-bodies
+;; containing one cg hook at the limb-tips origin
+(define (initialize-limb-tip key limb-tip-posn posn-mass rot-mass)
+  (let ([limb-tip (rb* key #true limb-tip-posn 0 posn-mass rot-mass)])
+    (lens-set (rb/hook-lens 'cg)
+              limb-tip
+              origin)))
+
+(define (sim-hook-lens path)
+  (match path
+    [(cons rb-id hook-id)
+     (lens-compose (dict-ref-lens hook-id)
+                   rb-hooks-lens
+                   (dict-ref-lens rb-id)
+                   sim-rigid-bodies)]))
+
+(define (rest-length _) INITIAL-LIMB-LENGTH)
+(define (damped-spring-force sim a-hook-path b-hook-path spring-state)
+  (let* ([a-rb (dict-ref (sim-rigid-bodies sim) (first a-hook-path))]
+         [a-hook (lens-view (sim-hook-lens a-hook-path) sim)]
+         [a-hook-posn (rb/find-hook-position a-rb (rest a-hook-path))]
+         [b-rb (dict-ref (sim-rigid-bodies sim) (first b-hook-path))]
+         [b-hook (lens-view (sim-hook-lens b-hook-path) sim)]
+         [b-hook-posn (rb/find-hook-position b-rb (rest b-hook-path))])
+     (rb/damped-spring-force a-hook-posn b-hook-posn
+                             (rb/find-hook-velocity a-rb (rest a-hook-path))
+                             (rest-length spring-state)
+                             K BETA)))
+
+(define (gravity-force _1 _2 _3 _4)
+  (posn 0 GRAVITY-FORCE))
+
+;; climber-state
+(define (cs/init)
+  (let ([torso (initialize-torso)]
+        [hand-l (initialize-limb-tip 'hand-l (dict-ref TIP-OFFSET-MAP 'sh-l) 1 0)]
+        [hand-r (initialize-limb-tip 'hand-r (dict-ref TIP-OFFSET-MAP 'sh-r) 1 0)]
+        [foot-l (initialize-limb-tip 'foot-l (dict-ref TIP-OFFSET-MAP 'hi-l) 1 0)]
+        [foot-r (initialize-limb-tip 'foot-r (dict-ref TIP-OFFSET-MAP 'hi-r) 1 0)])
+    (climber-state (sim `((torso . ,torso)
+                          (hand-l . ,hand-l)
+                          (hand-r . ,hand-r)
+                          (foot-l . ,foot-l)
+                          (foot-r . ,foot-r))
+                        (list (force '(torso . sh-l) '(hand-l . cg)
+                                     damped-spring-force '())
+                              (force '(torso . sh-r) '(hand-r . cg)
+                                     damped-spring-force '())
+                              (force '(torso . hi-l) '(foot-l . cg)
+                                     damped-spring-force '())
+                              (force '(torso . hi-r) '(foot-r . cg)
+                                     damped-spring-force '())
+                              (force '(torso . cg) '()
+                                     gravity-force '())))
+                   LIMB-MAP
+                   0)))
+
+(big-bang (cs/init)
           [to-draw cs/draw WIDTH HEIGHT]
           [on-tick cs/tick DT])

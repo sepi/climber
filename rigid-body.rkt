@@ -20,15 +20,20 @@
          rb/find-hook-position
          rb/integrate)
 
-(struct/lens rb (position position-velocity
-                          rotation rotation-velocity
-                          position-mass
-                          rotation-mass
-                          hooks)
+(struct/lens rb (id
+                 static
+                 position position-velocity
+                 rotation rotation-velocity
+                 position-mass
+                 rotation-mass
+                 hooks)
   #:transparent)
 
-(define (rb* position rotation position-mass rotation-mass)
-  (rb position (posn 0 0) rotation 0 position-mass rotation-mass '()))
+(define (rb* id static position rotation position-mass rotation-mass)
+  (rb id static
+      position origin
+      rotation 0
+      position-mass rotation-mass '()))
 
 (struct/lens rb-hook (position f)
   #:transparent)
