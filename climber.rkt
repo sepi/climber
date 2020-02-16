@@ -50,7 +50,7 @@
               (hi-r . -1))
             key))
 
-(define TIPS
+(define LIMB-MAP
   (map (lambda (key)
          (cons key (limb INITIAL-LIMB-LENGTH
                          (posn-add (dict-ref TIP-OFFSET-MAP key)
@@ -107,7 +107,7 @@
 ;; climber-state
 (define (cs/init empty-rb)
   (climber-state (initialize-rb empty-rb)
-                 TIPS
+                 LIMB-MAP
                  0))
 
 (define (cs/find-limb cs key)
@@ -147,13 +147,14 @@
                hook-posns)
         (place _ (circle 10 'outline "black") head-hook))))
 
-(define (cs/set-limb-tip-posn cs key a-posn)
+(define (cs/set-limb-tip-posn cs key limb-tip-offset)
   (let ([limb-tip-orig (posn-add INITIAL-POSITION (dict-ref TIP-OFFSET-MAP key))])
-    (lens-transform (lens-compose limb-tip-lens
-                                  (dict-ref-lens key)
-                                  climber-state-limbs-lens)
-                    cs
-                    (λ (tip-posn) (posn-add a-posn limb-tip-orig)))))
+    (lens-set (lens-compose limb-tip-lens
+                            (dict-ref-lens key)
+                            climber-state-limbs-lens)
+              cs
+              (posn-add limb-tip-orig
+                        limb-tip-offset))))
 
 (define (cs/set-hook-force cs key f)
   (lens-set (lens-compose rb-hook-f-lens
