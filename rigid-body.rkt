@@ -8,8 +8,6 @@
 (provide rb
          rb-rotation
          rb-position
-         rb*
-         rb-hook*
          rb-hook
          rb-hooks
          rb-hooks-lens
@@ -29,17 +27,8 @@
                  hooks)
   #:transparent)
 
-(define (rb* id static position rotation position-mass rotation-mass)
-  (rb id static
-      position origin
-      rotation 0
-      position-mass rotation-mass '()))
-
 (struct/lens rb-hook (position f)
   #:transparent)
-
-(define (rb-hook* position)
-  (rb-hook position origin))
 
 (define (rb/hook-lens key)
   (lens-compose (dict-ref-lens key)
