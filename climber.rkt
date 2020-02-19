@@ -44,7 +44,7 @@
 (define INITIAL-LIMB-LENGTH 20)
 
 (define DT (/ 1 60.0))
-(define K 1.0)
+(define K 1400.0)
 (define BETA 80.0)
 (define GRAVITY-FORCE 5000)
 
@@ -105,14 +105,6 @@
     (line (line canvas hook knee "black")
           knee tip "black")))
 
-(define (cs/find-limb cs key)
-  (dict-ref (climber-state-limbs cs) key))
-
-(define (cs/hook-limb-force hook-posn hook-vel limb)
-  (rb/damped-spring-force hook-posn (limb-tip limb)
-                          hook-vel (limb-rest-length limb)
-                          K BETA))
-
 (define (draw-rb rb canvas)
   (for/fold ([canvas canvas])
             ([key (in-dict-keys (rb-hooks rb))])
@@ -166,7 +158,7 @@
                hook-posns)
         (place _ (circle 10 'outline "black") head-hook)))
 
-(define (cs/set-limb-tip-posn cs key limb-tip-offset)
+#;(define (cs/set-limb-tip-posn cs key limb-tip-offset)
   (let ([limb-tip-orig (posn-add TORSO-POSITION (dict-ref TIP-OFFSET-MAP key))])
     (lens-set (lens-compose limb-tip-lens
                             (dict-ref-lens key)
@@ -174,29 +166,6 @@
               cs
               (posn-add limb-tip-orig
                         limb-tip-offset))))
-
-(define (cs/set-hook-force cs key f)
-  (lens-set (lens-compose rb-hook-f-lens
-                          (dict-ref-lens key)
-                          rb-hooks-lens
-                          climber-state-torso-lens)
-            cs
-            f))
-
-(define (cs/apply-limb-force rb limbs key)
-  (lens-set (lens-compose rb-hook-f-lens
-                          (dict-ref-lens key)
-                          rb-hooks-lens)
-            rb
-            (cs/hook-limb-force (rb/find-hook-position rb key)
-                                (rb/find-hook-velocity rb key)
-                                (dict-ref limbs key))))
-
-;; Apply limb forces to hooks
-(define (cs/apply-limb-forces rb limbs)
-  (foldl (λ (key t) (cs/apply-limb-force t limbs key))
-         rb
-         LIMB-KEYS))
 
 (define (sim-update-force force sim)
   (let* ([a-hook-path (force-a-hook-path force)]
@@ -222,15 +191,15 @@
 (define (sim-update-forces sim)
   (foldl sim-update-force
          sim
-         (lens-view sim-forces-lens sim)))
+         (sim-forces sim)))
 
 (define (sim-reset-forces sim)
   (foldl (λ (force sim*)
            (lens-set (sim-hook-f-lens (force-a-hook-path force))
-                     sim
+                     sim*
                      origin))
          sim
-         (lens-view sim-forces-lens sim)))
+         (sim-forces sim)))
 
 (define (cs/tick cs)
   (let-values ([(stick-l stick-r) (pad-stick-posns)])
@@ -242,8 +211,8 @@
                         (λ (torso) (rb/integrate torso DT)))
         (lens-transform climber-state-time-lens _
                         (λ (t) (+ t DT)))
-        (cs/set-limb-tip-posn _ 'sh-l stick-l)
-        (cs/set-limb-tip-posn _ 'sh-r stick-r))))
+        #;(cs/set-limb-tip-posn _ 'sh-l stick-l)
+        #;(cs/set-limb-tip-posn _ 'sh-r stick-r))))
 
 (define (initialize-torso)
   (let ([torso (rb 'torso
@@ -253,7 +222,7 @@
                    TORSO-POSITION-MASS TORSO-ROTATION-MASS
                    '())])
     (define (make-hook-from-offset x y)
-      (rb-hook (posn x y) origin))
+      (hook (posn x y) origin))
     (~> torso
         (lens-set (rb/hook-lens 'sh-l) _ (make-hook-from-offset -10 -20))
         (lens-set (rb/hook-lens 'sh-r) _ (make-hook-from-offset 10 -20))
@@ -272,7 +241,7 @@
                       '())])
     (lens-set (rb/hook-lens 'cg)
               limb-tip
-              (rb-hook origin origin))))
+              (hook origin origin))))
 
 (define (sim-hook-lens path)
   (match path
@@ -283,7 +252,7 @@
                    sim-rigid-bodies-lens)]))
 
 (define (sim-hook-f-lens path)
-  (lens-compose rb-hook-f-lens
+  (lens-compose hook-f-lens
                 (sim-hook-lens path)))
 
 (define (rest-length _) INITIAL-LIMB-LENGTH)
@@ -298,7 +267,6 @@
                                     (rb/find-hook-velocity a-rb (cdr a-hook-path))
                                     (rest-length spring-state)
                                     K BETA)])
-    (displayln f)
     f))
 
 (define (gravity-force _1 _2 _3 _4)

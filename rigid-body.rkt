@@ -6,20 +6,19 @@
          "posn+.rkt")
 
 (provide rb
-         rb-rotation
-         rb-position
-         rb-hook
-         rb-hooks
          rb-hooks-lens
-         rb-hook-f-lens
+         rb-hooks
+
+         hook
+         hook-f-lens
+
          rb/hook-lens
          rb/damped-spring-force
          rb/find-hook-velocity
          rb/find-hook-position
          rb/integrate)
 
-(struct/lens rb (id
-                 static
+(struct/lens rb (id static
                  position position-velocity
                  rotation rotation-velocity
                  position-mass
@@ -27,7 +26,7 @@
                  hooks)
   #:transparent)
 
-(struct/lens rb-hook (position f)
+(struct/lens hook (position f)
   #:transparent)
 
 (define (rb/hook-lens key)
@@ -47,7 +46,7 @@
 (define (rb/transform-hook-position an-rb a-hook)
   (let* ([cm (rb-position an-rb)]
          [rot (rb-rotation an-rb)]
-         [hook-position (rb-hook-position a-hook)])
+         [hook-position (hook-position a-hook)])
     (posn-add cm
               (posn-rot origin rot hook-position))))
 
@@ -82,7 +81,7 @@
 
 (define (rb/resultant-force an-rb)
   (sequence-fold (lambda (f-sum b-hook)
-                   (posn-add f-sum (rb-hook-f b-hook)))
+                   (posn-add f-sum (hook-f b-hook)))
                  (posn 0 0)
                  (in-dict-values (rb-hooks an-rb))))
 
@@ -92,7 +91,7 @@
                           [hook-posn (rb/transform-hook-position an-rb hook)]
                           [lever (posn-subtract hook-posn cm)])
                      (+ torque
-                        (rb/torque lever (rb-hook-f hook)))))
+                        (rb/torque lever (hook-f hook)))))
                  0
                  (in-dict-values (rb-hooks an-rb))))
 
