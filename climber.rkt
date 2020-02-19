@@ -62,7 +62,6 @@
 
 (define TORSO-POSITION (posn (/ WIDTH 2)
                              (/ HEIGHT 2)))
-
 (define TORSO-POSITION-MASS 3)
 (define TORSO-ROTATION-MASS 900)
 
@@ -73,31 +72,12 @@
 (define BETA 80.0)
 (define GRAVITY-FORCE 5000)
 
-(define LIMB-KEYS '(sh-l sh-r hi-l hi-r))
-
-(define TIP-OFFSET-MAP
-  `((sh-l . ,(posn -40 -30))
-    (sh-r . ,(posn 40 -30))
-    (hi-l . ,(posn -40 30))
-    (hi-r . ,(posn 40 30))))
+;;
+;; Drawing
+;;
 
 (define (knee-direction key)
-  (dict-ref '((sh-l . -1)
-              (sh-r . 1)
-              (hi-l . 1)
-              (hi-r . -1))
-            key))
-
-(define LIMB-MAP
-  (map (lambda (key)
-         (cons key (limb INITIAL-LIMB-LENGTH
-                         (posn-add (dict-ref TIP-OFFSET-MAP key)
-                                   TORSO-POSITION))))
-       LIMB-KEYS))
-
-(define (pad-stick-posns)
-  (values (posn (pad-stick 'left 'x) (pad-stick 'left 'y))
-          (posn (pad-stick 'right 'x) (pad-stick 'right 'y))))
+  (dict-ref '((sh-l . -1) (sh-r . 1) (hi-l . 1) (hi-r . -1)) key))
 
 (define (knee-posn hook tip lower-limb-length upper-limb-length knee-dir)
   (let* ([arm (posn-subtract tip hook)]
@@ -114,19 +94,15 @@
                               (posn-rot origin (radians->degrees (* knee-dir alpha)) arm-norm)))
         tip)))
 
-;; (define (limb/draw canvas hook tip lower-limb-length upper-limb-length knee-dir)
-;;   (let ([knee (knee-posn hook tip lower-limb-length upper-limb-length knee-dir)])
-;;     (line* (line* canvas hook knee "black")
-;;           knee tip "black")))
-
 (define (draw-rb rb canvas)
   (for/fold ([canvas canvas])
             ([key (in-dict-keys (rb-hooks rb))])
     (place* canvas (circle 3 'outline "black") (rb/find-hook-position rb key))))
 
-(define (draw-force f canvas sim)
+(define (draw-force f sim canvas)
   (let ([a-path (force-a-hook-path f)]
-        [b-path (force-b-hook-path f)])
+        [b-path (force-b-hook-path f)]
+        [f-state (force-state f)])
     (if b-path
         (let ([from (rb/find-hook-position (dict-ref (sim-rigid-bodies sim)
                                                      (car a-path))
@@ -134,44 +110,26 @@
               [to   (rb/find-hook-position (dict-ref (sim-rigid-bodies sim)
                                                      (car b-path))
                                            (cdr b-path))])
-          (line* canvas from to "blue"))
+          (draw-limb from to f-state canvas)
+          #;(line* canvas from to "blue"))
         canvas)))
+
+(define (draw-limb from-posn to-posn force-state canvas)
+  (let* ([limb-length (dict-ref force-state 'limb-length)]
+         [limb-key (dict-ref force-state 'key)]
+         [knee-dir (knee-direction limb-key)]
+         [knee (knee-posn from-posn to-posn limb-length limb-length knee-dir)])
+    (~> canvas
+        (line* _ from-posn knee "black")
+        (line* _ knee to-posn "black"))))
 
 (define (cs/draw cs)
   (let* ([sim (climber-state-sim cs)])
     (~> SCENE
         (foldl draw-rb _ (dict-values (sim-rigid-bodies sim)))
-        (foldl (lambda (f canvas) (draw-force f canvas sim))
+        (foldl (lambda (f canvas) (draw-force f sim canvas))
                _ (sim-forces sim)))))
-  #;(let* ([an-rb (lens-view climber-state-torso-lens cs)]
-         [hook-posns (map (λ (key) (rb/find-hook-position an-rb key))
-                          LIMB-KEYS)]
-         [limb-tip-posns (map (λ (key) (limb-tip (cs/find-limb cs key)))
-                              LIMB-KEYS)]
-         [hook-vels (map (λ (key) (rb/find-hook-velocity an-rb key))
-                         LIMB-KEYS)]
-         [head-hook (rb/find-hook-position (lens-view climber-state-torso-lens cs)
-                                           'head)])
-    (~> SCENE
-        (foldl (λ (hook-posn image)
-                 (place image (circle 3 'outline "black") hook-posn))
-               _
-               hook-posns)
-        (foldl (λ (limb-tip image)
-                 (place image (circle 4 'solid "blue") limb-tip))
-               _
-               limb-tip-posns)
-        (foldl (λ (key limb-tip hook-posn image)
-                 (limb/draw image
-                            hook-posn limb-tip
-                            25 25
-                            (knee-direction key)))
-               _
-               LIMB-KEYS
-               limb-tip-posns
-               hook-posns)
-        (place _ (circle 10 'outline "black") head-hook)))
-
+  
 #;(define (cs/set-limb-tip-posn cs key limb-tip-offset)
   (let ([limb-tip-orig (posn-add TORSO-POSITION (dict-ref TIP-OFFSET-MAP key))])
     (lens-set (lens-compose limb-tip-lens
@@ -180,6 +138,10 @@
               cs
               (posn-add limb-tip-orig
                         limb-tip-offset))))
+
+;;
+;; Simulation
+;;
 
 (define (sim-update-force force sim)
   (let* ([a-hook-path (force-a-hook-path force)]
@@ -281,7 +243,23 @@
 (define (gravity-force _1 _2 _3 _4)
   (posn 0 GRAVITY-FORCE))
 
-;; climber-state
+;;
+;; Initialize state
+;;
+
+(define TIP-OFFSET-MAP
+  `((sh-l . ,(posn -40 -30))
+    (sh-r . ,(posn 40 -30))
+    (hi-l . ,(posn -40 30))
+    (hi-r . ,(posn 40 30))))
+
+(define LIMB-MAP
+  (map (lambda (key)
+         (cons key (limb INITIAL-LIMB-LENGTH
+                         (posn-add (dict-ref TIP-OFFSET-MAP key)
+                                   TORSO-POSITION))))
+       '(sh-l sh-r hi-l hi-r)))
+
 (define (cs/init)
   (let ([torso (initialize-torso)]
         [hand-l (initialize-limb-tip 'hand-l (dict-ref TIP-OFFSET-MAP 'sh-l) 1 0)]
@@ -294,13 +272,17 @@
                           (foot-l . ,foot-l)
                           (foot-r . ,foot-r))
                         (list (force '(torso . sh-l) '(hand-l . cg)
-                                     damped-spring-force '())
+                                     damped-spring-force '((key . sh-l)
+                                                           (limb-length . 25)))
                               (force '(torso . sh-r) '(hand-r . cg)
-                                     damped-spring-force '())
+                                     damped-spring-force '((key . sh-r)
+                                                           (limb-length . 25)))
                               (force '(torso . hi-l) '(foot-l . cg)
-                                     damped-spring-force '())
+                                     damped-spring-force '((key . hi-l)
+                                                           (limb-length . 25)))
                               (force '(torso . hi-r) '(foot-r . cg)
-                                     damped-spring-force '())
+                                     damped-spring-force '((key . hi-r)
+                                                           (limb-length . 25)))
                               (force '(torso . cg) #false
                                      gravity-force '())))
                    LIMB-MAP

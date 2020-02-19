@@ -1,9 +1,11 @@
 #lang racket
 
-(require csfml)
+(require csfml
+         posn)
 
 (provide pad-find-first-connected
-         pad-stick)
+         pad-stick
+         pad-stick-posns)
 
 (define (pad-find-first-connected)
   (sfJoystick_update)
@@ -26,3 +28,7 @@
             [(and (equal? side 'right) (equal? axis 'y))
              (sfJoystick_getAxisPosition PAD-IDX 'sfJoystickR)])
       0))
+
+(define (pad-stick-posns)
+  (values (posn (pad-stick 'left 'x) (pad-stick 'left 'y))
+          (posn (pad-stick 'right 'x) (pad-stick 'right 'y))))
