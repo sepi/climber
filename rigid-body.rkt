@@ -6,8 +6,9 @@
          "posn+.rkt")
 
 (provide rb
-         rb-hooks-lens
          rb-hooks
+         rb-hooks-lens
+         rb-position-lens
          rb-static
 
          hook

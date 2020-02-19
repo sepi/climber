@@ -5,7 +5,7 @@
 
 (provide pad-find-first-connected
          pad-stick
-         pad-stick-posns)
+         pad-stick-posn)
 
 (define (pad-find-first-connected)
   (sfJoystick_update)
@@ -29,6 +29,5 @@
              (sfJoystick_getAxisPosition PAD-IDX 'sfJoystickR)])
       0))
 
-(define (pad-stick-posns)
-  (values (posn (pad-stick 'left 'x) (pad-stick 'left 'y))
-          (posn (pad-stick 'right 'x) (pad-stick 'right 'y))))
+(define (pad-stick-posn side)
+  (posn (pad-stick side 'x) (pad-stick side 'y)))
