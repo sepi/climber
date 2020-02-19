@@ -8,7 +8,12 @@
          lens
          "dualshock.rkt"
          "rigid-body.rkt"
-         "posn+.rkt")
+         "posn+.rkt"
+         "graphics.rkt")
+
+;;
+;; Structs
+;;
 
 (struct/lens climber-state (sim limbs time)
              #:transparent)
@@ -26,10 +31,30 @@
 (struct/lens force (a-hook-path b-hook-path function state)
              #:transparent)
 
-(define climber-state-torso-lens
-  (lens-compose (dict-ref-lens 'torso)
+;;
+;; Lenses
+;;
+
+(define (climber-state-rigid-body-lens rb-key)
+  (lens-compose (dict-ref-lens rb-key)
                 sim-rigid-bodies-lens
                 climber-state-sim-lens))
+
+(define (sim-hook-lens path)
+  (match path
+    [(cons rb-id hook-id)
+     (lens-compose (dict-ref-lens hook-id)
+                   rb-hooks-lens
+                   (dict-ref-lens rb-id)
+                   sim-rigid-bodies-lens)]))
+
+(define (sim-hook-f-lens path)
+  (lens-compose hook-f-lens
+                (sim-hook-lens path)))
+
+;;
+;; Constants
+;;
 
 (define WIDTH 600)
 (define HEIGHT 600)
@@ -70,17 +95,6 @@
                                    TORSO-POSITION))))
        LIMB-KEYS))
 
-(define (line canvas from to color)
-  (scene+line canvas
-               (posn-x from) (posn-y from)
-               (posn-x to) (posn-y to)
-               color))
-
-(define (place canvas an-image a-posn)
-  (place-image an-image
-               (posn-x a-posn) (posn-y a-posn)
-               canvas))
-
 (define (pad-stick-posns)
   (values (posn (pad-stick 'left 'x) (pad-stick 'left 'y))
           (posn (pad-stick 'right 'x) (pad-stick 'right 'y))))
@@ -100,15 +114,15 @@
                               (posn-rot origin (radians->degrees (* knee-dir alpha)) arm-norm)))
         tip)))
 
-(define (limb/draw canvas hook tip lower-limb-length upper-limb-length knee-dir)
-  (let ([knee (knee-posn hook tip lower-limb-length upper-limb-length knee-dir)])
-    (line (line canvas hook knee "black")
-          knee tip "black")))
+;; (define (limb/draw canvas hook tip lower-limb-length upper-limb-length knee-dir)
+;;   (let ([knee (knee-posn hook tip lower-limb-length upper-limb-length knee-dir)])
+;;     (line* (line* canvas hook knee "black")
+;;           knee tip "black")))
 
 (define (draw-rb rb canvas)
   (for/fold ([canvas canvas])
             ([key (in-dict-keys (rb-hooks rb))])
-    (place canvas (circle 3 'outline "black") (rb/find-hook-position rb key))))
+    (place* canvas (circle 3 'outline "black") (rb/find-hook-position rb key))))
 
 (define (draw-force f canvas sim)
   (let ([a-path (force-a-hook-path f)]
@@ -120,7 +134,7 @@
               [to   (rb/find-hook-position (dict-ref (sim-rigid-bodies sim)
                                                      (car b-path))
                                            (cdr b-path))])
-          (line canvas from to "blue"))
+          (line* canvas from to "blue"))
         canvas)))
 
 (define (cs/draw cs)
@@ -206,9 +220,16 @@
     (~> cs
         (lens-transform climber-state-sim-lens _ sim-reset-forces)
         (lens-transform climber-state-sim-lens _ sim-update-forces)
-        ;; TODO integrate all non-static rigid-bodies, not only torso
-        (lens-transform climber-state-torso-lens _
-                        (λ (torso) (rb/integrate torso DT)))
+        ; Integrate non-static rigid bodies
+        (foldl (λ (key cs)
+                 (lens-transform (climber-state-rigid-body-lens key)
+                                 cs
+                                 (λ (rb)
+                                   (if (rb-static rb)
+                                       rb
+                                       (rb/integrate rb DT)))))
+               _
+               (dict-keys (sim-rigid-bodies (climber-state-sim cs))))
         (lens-transform climber-state-time-lens _
                         (λ (t) (+ t DT)))
         #;(cs/set-limb-tip-posn _ 'sh-l stick-l)
@@ -242,18 +263,6 @@
     (lens-set (rb/hook-lens 'cg)
               limb-tip
               (hook origin origin))))
-
-(define (sim-hook-lens path)
-  (match path
-    [(cons rb-id hook-id)
-     (lens-compose (dict-ref-lens hook-id)
-                   rb-hooks-lens
-                   (dict-ref-lens rb-id)
-                   sim-rigid-bodies-lens)]))
-
-(define (sim-hook-f-lens path)
-  (lens-compose hook-f-lens
-                (sim-hook-lens path)))
 
 (define (rest-length _) INITIAL-LIMB-LENGTH)
 (define (damped-spring-force sim a-hook-path b-hook-path spring-state)

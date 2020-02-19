@@ -8,6 +8,7 @@
 (provide rb
          rb-hooks-lens
          rb-hooks
+         rb-static
 
          hook
          hook-f-lens
