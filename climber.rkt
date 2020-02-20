@@ -20,9 +20,6 @@
 (struct/lens sim (rigid-bodies forces)
              #:transparent)
 
-(struct/lens limb (rest-length tip)
-             #:transparent)
-
 ; Represents a force generating connection between two rigid-body hooks.
 ; The calculated force will be applied to both hooks.
 ; hooks are referenced using paths i.e. pairs (rigid-body-id . hook-id)
