@@ -14,7 +14,12 @@
 ;; Structs
 ;;
 
-(struct/lens climber-state (sim time)
+(struct/lens climber-state (sim time control)
+             #:transparent)
+
+;; Controls wether hand or foot is controlled by left or right stick
+;; Can be 'hand or 'foot
+(struct/lens control (left right)
              #:transparent)
 
 (struct/lens sim (rigid-bodies forces)
@@ -166,8 +171,9 @@
 (define (cs/tick cs)
   (pad-update)
   (~> cs
-      (cs/set-limb-tip-posn _ 'hand-l (pad-stick-posn 'left))
-      (cs/set-limb-tip-posn _ 'hand-r (pad-stick-posn 'right))
+      (switch-tip _)
+      (cs/set-limb-tip-posn _ 'left (pad-stick-posn 'left))
+      (cs/set-limb-tip-posn _ 'right (pad-stick-posn 'right))
       (lens-transform climber-state-sim-lens _ sim-reset-forces)
       (lens-transform climber-state-sim-lens _ sim-update-forces)
       ; Integrate non-static rigid bodies
@@ -206,16 +212,51 @@
 ;; Controls
 ;;
 
-(define (cs/set-limb-tip-posn cs key limb-tip-offset)
-  (let* ([limb-tip-orig (posn-add TORSO-POSITION
-                                  (dict-ref TIP-OFFSET-MAP key))]
+(define (cs/set-limb-tip-posn cs side limb-tip-offset)
+  (let* ([rb-key (select-controlled-rb side (cs/controlled-tip cs side) )]
+         [limb-tip-orig (posn-add TORSO-POSITION
+                                  (dict-ref TIP-OFFSET-MAP rb-key))]
          [limb-tip-posn (posn-add limb-tip-orig
                                   limb-tip-offset)]
          [tip-posn-lens (lens-compose rb-position-lens
-                                      (climber-state-rigid-body-lens key))])
+                                      (climber-state-rigid-body-lens rb-key))])
     (lens-set tip-posn-lens
               cs
               limb-tip-posn)))
+
+(define (cs/controlled-tip cs side)
+  (match side
+    ['left (control-left (climber-state-control cs))]
+    ['right (control-right (climber-state-control cs))]))
+
+(define (select-controlled-rb side tip)
+  (match (cons side tip)
+    ['(left . hand) 'hand-l]
+    ['(right . hand) 'hand-r]
+    ['(left . foot) 'foot-l]
+    ['(right . foot) 'foot-r]))
+
+(define (other-tip tip)
+  (case tip
+    ['hand 'foot]
+    ['foot 'hand]))
+
+(define (switch-tip cs)
+  (~> cs
+      (lens-transform (lens-compose control-left-lens
+                                    climber-state-control-lens)
+                      _
+                      (λ (old-tip)
+                        (if (pad-button-press 'l1)
+                            (other-tip old-tip)
+                            old-tip)))
+      (lens-transform (lens-compose control-right-lens
+                                    climber-state-control-lens)
+                      _
+                      (λ (old-tip)
+                        (if (pad-button-press 'r1)
+                            (other-tip old-tip)
+                            old-tip)))))
 
 ;;
 ;; Initialize state
@@ -271,7 +312,8 @@
                      damped-spring-force '((limb-length . 25)))
               (force 'torso-g '(torso . cg) #false
                      gravity-force '())))
-   0))
+   0
+   (control 'hand 'hand)))
 
 (big-bang (cs/init)
           [to-draw cs/draw WIDTH HEIGHT]
