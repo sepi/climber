@@ -5,7 +5,7 @@
          posn
          threading
          lens
-         "dualshock.rkt"
+         "pad.rkt"
          "rigid-body.rkt"
          "posn+.rkt"
          "graphics.rkt")
@@ -164,6 +164,7 @@
          (sim-forces sim)))
 
 (define (cs/tick cs)
+  (pad-update)
   (~> cs
       (cs/set-limb-tip-posn _ 'hand-l (pad-stick-posn 'left))
       (cs/set-limb-tip-posn _ 'hand-r (pad-stick-posn 'right))
