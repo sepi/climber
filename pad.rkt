@@ -7,6 +7,7 @@
          pad-find-first-connected
          pad-stick
          pad-button-press
+         pad-button-release
          pad-button-pressed
          pad-stick-posn)
 
@@ -39,6 +40,11 @@
 (define (pad-button-press button)
   (and (not (dict-ref BUTTON-PREVIOUS-STATE button))
        (pad-button-pressed button)))
+
+;; True if button is newly released
+(define (pad-button-release button)
+  (and (dict-ref BUTTON-PREVIOUS-STATE button)
+       (not (pad-button-pressed button))))
 
 (define (pad-stick side axis)
   (if PAD-IDX
