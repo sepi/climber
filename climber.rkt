@@ -241,16 +241,6 @@
                                    TORSO-POSITION))))
        '(sh-l sh-r hi-l hi-r)))
 
-(define (initialize-limb-tip key limb-tip-offset posn-mass rot-mass)
-  (let ([limb-tip (rb key #true
-                      (posn-add limb-tip-offset TORSO-POSITION) origin
-                      0 0
-                      posn-mass rot-mass
-                      '())])
-    (lens-set (rb/hook-lens 'cg)
-              limb-tip
-              (hook origin origin))))
-
 (define (initialize-torso)
   (let ([torso (rb 'torso
                    #false
@@ -268,13 +258,23 @@
         (lens-set (rb/hook-lens 'cg) _ (make-hook-from-offset 0 0))
         (lens-set (rb/hook-lens 'head) _ (make-hook-from-offset 0 -35)))))
 
+(define (initialize-limb-tip key posn-mass rot-mass)
+  (let ([limb-tip (rb key #true
+                      (posn-add (dict-ref TIP-OFFSET-MAP key) TORSO-POSITION) origin
+                      0 0
+                      posn-mass rot-mass
+                      '())])
+    (lens-set (rb/hook-lens 'cg)
+              limb-tip
+              (hook origin origin))))
+
 (define (cs/init)
   (climber-state
    (sim `((torso  . ,(initialize-torso))
-          (hand-l . ,(initialize-limb-tip 'hand-l (dict-ref TIP-OFFSET-MAP 'sh-l) 1 0))
-          (hand-r . ,(initialize-limb-tip 'hand-r (dict-ref TIP-OFFSET-MAP 'sh-r) 1 0))
-          (foot-l . ,(initialize-limb-tip 'foot-l (dict-ref TIP-OFFSET-MAP 'hi-l) 1 0))
-          (foot-r . ,(initialize-limb-tip 'foot-r (dict-ref TIP-OFFSET-MAP 'hi-r) 1 0)))
+          (hand-l . ,(initialize-limb-tip 'hand-l 1 0))
+          (hand-r . ,(initialize-limb-tip 'hand-r 1 0))
+          (foot-l . ,(initialize-limb-tip 'foot-l 1 0))
+          (foot-r . ,(initialize-limb-tip 'foot-r 1 0)))
         (list (force '(torso . sh-l) '(hand-l . cg)
                      damped-spring-force '((key . sh-l)
                                            (limb-length . 25)))
