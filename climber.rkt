@@ -41,6 +41,11 @@
                 sim-rigid-bodies-lens
                 climber-state-sim-lens))
 
+(define (cs-rigid-body-prop-lens rb-key prop-key)
+  (lens-compose (dict-ref-lens prop-key)
+                rb-props-lens
+                (climber-state-rigid-body-lens rb-key)))
+
 (define (sim-hook-lens path)
   (match path
     [(cons rb-id hook-id)
@@ -214,9 +219,8 @@
 
 (define (cs/set-limb-tip-posn cs side limb-tip-offset)
   (let* ([rb-key (select-controlled-rb side (cs/controlled-tip cs side) )]
-         [limb-tip-orig (posn-add TORSO-POSITION
-                                  (dict-ref TIP-OFFSET-MAP rb-key))]
-         [limb-tip-posn (posn-add limb-tip-orig
+         [ref-posn (lens-view (cs-rigid-body-prop-lens rb-key 'ref-posn) cs)]
+         [limb-tip-posn (posn-add ref-posn
                                   limb-tip-offset)]
          [tip-posn-lens (lens-compose rb-position-lens
                                       (climber-state-rigid-body-lens rb-key))])
@@ -274,6 +278,7 @@
                    TORSO-POSITION origin
                    0 0
                    TORSO-POSITION-MASS TORSO-ROTATION-MASS
+                   '()
                    '())])
     (define (make-hook-from-offset x y)
       (hook (posn x y) origin))
@@ -286,13 +291,15 @@
         (lens-set (rb/hook-lens 'head) _ (make-hook-from-offset 0 -35)))))
 
 (define (initialize-limb-tip key posn-mass rot-mass)
-  (let ([limb-tip (rb key #true
-                      (posn-add (dict-ref TIP-OFFSET-MAP key) TORSO-POSITION) origin
-                      0 0
-                      posn-mass rot-mass
-                      '())])
+  (let* ([ref-posn (posn-add (dict-ref TIP-OFFSET-MAP key) TORSO-POSITION)]
+         [limb-tip-rb (rb key #true
+                          ref-posn origin
+                          0 0
+                          posn-mass rot-mass
+                          '()
+                          (list (cons 'ref-posn ref-posn)))])
     (lens-set (rb/hook-lens 'cg)
-              limb-tip
+              limb-tip-rb
               (hook origin origin))))
 
 (define (cs/init)
