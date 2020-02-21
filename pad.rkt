@@ -46,17 +46,25 @@
   (and (dict-ref BUTTON-PREVIOUS-STATE button)
        (not (pad-button-pressed button))))
 
+(define (pad-map side axis)
+  (case (system-type 'os)
+    ['unix
+     (case (list side axis)
+       ['(left x) 'sfJoystickX]
+       ['(left y) 'sfJoystickY]
+       ['(right x) 'sfJoystickU]
+       ['(right y) 'sfJoystickV])]
+    ['macosx
+     (case (list side axis)
+       ['(left x) 'sfJoystickX]
+       ['(left y) 'sfJoystickY]
+       ['(right x) 'sfJoystickZ]
+       ['(right y) 'sfJoystickR])]))
+
 (define (pad-stick side axis)
   (if PAD-IDX
-      (cond [(and (equal? side 'left) (equal? axis 'x))
-             (sfJoystick_getAxisPosition PAD-IDX 'sfJoystickX)]
-            [(and (equal? side 'left) (equal? axis 'y))
-             (sfJoystick_getAxisPosition PAD-IDX 'sfJoystickY)]
-            [(and (equal? side 'right) (equal? axis 'x))
-             (sfJoystick_getAxisPosition PAD-IDX 'sfJoystickZ)]
-            [(and (equal? side 'right) (equal? axis 'y))
-             (sfJoystick_getAxisPosition PAD-IDX 'sfJoystickR)])
-      0))
+      (sfJoystick_getAxisPosition PAD-IDX (pad-map side axis))
+      origin))
 
 (define (pad-stick-posn side)
   (posn (pad-stick side 'x) (pad-stick side 'y)))
