@@ -9,6 +9,7 @@
          rb-hooks
          rb-hooks-lens
          rb-position-lens
+         rb-props-lens
          rb-static
 
          hook
@@ -25,7 +26,8 @@
                  rotation rotation-velocity
                  position-mass
                  rotation-mass
-                 hooks)
+                 hooks
+                 props)
   #:transparent)
 
 (struct/lens hook (position f)
