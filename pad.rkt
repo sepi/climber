@@ -52,8 +52,10 @@
      (case (list side axis)
        ['(left x) 'sfJoystickX]
        ['(left y) 'sfJoystickY]
+       ['(left z) 'sfJoystickZ]
        ['(right x) 'sfJoystickU]
-       ['(right y) 'sfJoystickV])]
+       ['(right y) 'sfJoystickV]
+       ['(right z) 'sfJoystickR])]
     ['macosx
      (case (list side axis)
        ['(left x) 'sfJoystickX]
