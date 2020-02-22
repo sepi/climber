@@ -176,9 +176,7 @@
 (define (cs/tick cs)
   (pad-update)
   (~> cs
-      (switch-tip _)
-      (cs/set-limb-tip-posn _ 'left (pad-stick-posn 'left))
-      (cs/set-limb-tip-posn _ 'right (pad-stick-posn 'right))
+      (handle-controls _)
       (lens-transform climber-state-sim-lens _ sim-reset-forces)
       (lens-transform climber-state-sim-lens _ sim-update-forces)
       ; Integrate non-static rigid bodies
@@ -261,6 +259,26 @@
                         (if (pad-button-press 'r1)
                             (other-tip old-tip)
                             old-tip)))))
+
+(define (maybe-update-limb-tip-ref cs)
+  ;; (lens-update (cs-rigid-body-prop-lens ))
+  ;; (lens-view (lens-compose control-left-lens
+  ;;                          climber-state-control-lens)
+  ;;            cs)
+  ;;(select-controlled-rb side (cs/controlled-tip cs side) )
+  (if (pad-button-press 'l1)
+      (lens-set (cs-rigid-body-prop-lens (select-controlled-rb 'left (cs/controlled-tip cs 'left))
+                                         'ref-posn)
+                cs
+                (pad-stick-posn 'left))
+      cs))
+
+(define (handle-controls cs)
+  (~> cs
+      (cs/set-limb-tip-posn _ 'left (pad-stick-posn 'left))
+      (cs/set-limb-tip-posn _ 'right (pad-stick-posn 'right))
+      switch-tip
+      maybe-update-limb-tip-ref))
 
 ;;
 ;; Initialize state
